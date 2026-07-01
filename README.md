@@ -7,20 +7,20 @@ A small, keyless demo that fronts two free [Open-Meteo](https://open-meteo.com) 
 
 ## 🔗 Live demo
 
-**https://open-meteo-tyk-demo.kinlane.workers.dev**
+**https://weather.apievangelist.com**  (also on `https://open-meteo-tyk-demo.kinlane.workers.dev`)
 
 | Endpoint | What it does |
 |---|---|
-| [`/`](https://open-meteo-tyk-demo.kinlane.workers.dev/) | Demo page — type a city, it geocodes and renders current temp + AQI |
+| [`/`](https://weather.apievangelist.com/) | Demo page — type a city, it geocodes and renders current temp + AQI |
 | `/forecast?latitude=&longitude=` | Weather forecast (proxies `api.open-meteo.com/v1/forecast`) |
 | `/air-quality?latitude=&longitude=` | Air quality (proxies `air-quality-api.open-meteo.com/v1/air-quality`) |
 | `/geocode?name=` | Place name → coordinates (`geocoding-api.open-meteo.com/v1/search`) |
-| [`/openapi.json`](https://open-meteo-tyk-demo.kinlane.workers.dev/openapi.json) | Machine-readable description of the proxy |
+| [`/openapi.json`](https://weather.apievangelist.com/openapi.json) | Machine-readable description of the proxy |
 | `/health` | Liveness |
 
 ```bash
-curl "https://open-meteo-tyk-demo.kinlane.workers.dev/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&timezone=auto"
-curl "https://open-meteo-tyk-demo.kinlane.workers.dev/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5&timezone=auto"
+curl "https://weather.apievangelist.com/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&timezone=auto"
+curl "https://weather.apievangelist.com/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5&timezone=auto"
 ```
 
 Both layers add the same value over the raw upstreams: **CORS**, **edge/response caching (~5 min)**, and **request validation** (missing `latitude`/`longitude` → `422`, upstream never touched).

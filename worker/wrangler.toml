@@ -3,3 +3,7 @@ account_id = "06637f028805d143aad220043ab346e3"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
 workers_dev = true
+
+routes = [
+  { pattern = "weather.apievangelist.com", custom_domain = true }
+]
