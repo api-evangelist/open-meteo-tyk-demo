@@ -5,15 +5,21 @@
 ## Layout
 
 ```
-open-meteo-tyk/
+tyk/
 ├── docker-compose.yml          # Tyk Gateway (OSS) + Redis
 ├── tyk.standalone.conf         # file-based gateway config (loads ./apps)
-├── apps/                        # OAS API definitions the gateway loads
+├── apps/                        # OAS API definitions the gateway loads (JSON)
 │   ├── open-meteo-weather-air-quality-tyk-oas.json   # COMBINED: one API, two upstreams  → /env
 │   ├── open-meteo-weather-tyk-oas.json               # SPLIT:   weather only            → /weather
 │   └── open-meteo-air-quality-tyk-oas.json           # SPLIT:   air quality only        → /air
+├── yaml/                        # identical definitions in YAML (for reading / Dashboard import)
+│   ├── open-meteo-weather-air-quality-tyk-oas.yml
+│   ├── open-meteo-weather-tyk-oas.yml
+│   └── open-meteo-air-quality-tyk-oas.yml
 └── README.md
 ```
+
+> The gateway loads the **JSON** files in `apps/`. The `yaml/` copies are byte-for-byte equivalent (same keys/order) for easier reading and for tools/Dashboard flows that prefer YAML — edit the JSON as the source of truth, or regenerate the YAML from it.
 
 You get **two patterns to choose from**:
 
