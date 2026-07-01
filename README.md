@@ -12,14 +12,14 @@ A small, keyless demo that fronts two free [Open-Meteo](https://open-meteo.com) 
 | Endpoint | What it does |
 |---|---|
 | [`/`](https://weather.apievangelist.com/) | Demo page — type a city, it geocodes and renders current temp + AQI |
-| `/forecast?latitude=&longitude=` | Weather forecast (proxies `api.open-meteo.com/v1/forecast`) |
+| `/weather?latitude=&longitude=` | Weather forecast (proxies `api.open-meteo.com/v1/forecast`). Optional `forecast=N` days. |
 | `/air-quality?latitude=&longitude=` | Air quality (proxies `air-quality-api.open-meteo.com/v1/air-quality`) |
 | `/geocode?name=` | Place name → coordinates (`geocoding-api.open-meteo.com/v1/search`) |
 | [`/openapi.json`](https://weather.apievangelist.com/openapi.json) | Machine-readable description of the proxy |
 | `/health` | Liveness |
 
 ```bash
-curl "https://weather.apievangelist.com/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&timezone=auto"
+curl "https://weather.apievangelist.com/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&forecast=3&timezone=auto"
 curl "https://weather.apievangelist.com/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5&timezone=auto"
 ```
 
@@ -39,7 +39,7 @@ npm run deploy     # wrangler deploy (account pinned in wrangler.toml)
 ```bash
 cd tyk
 docker compose up -d
-curl "http://localhost:8080/env/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m&timezone=auto"
+curl "http://localhost:8080/env/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m&forecast=3&timezone=auto"
 ```
 
 See [tyk/README.md](tyk/README.md) for the combined vs split APIs, the MCP-expose flow, and tuning.

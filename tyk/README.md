@@ -24,17 +24,19 @@ All three load at once in the demo stack (distinct listen paths, no conflict), s
 
 | Client endpoint (via Tyk) | Upstream | Defined in |
 |---|---|---|
-| `GET /env/forecast` | `api.open-meteo.com/v1/forecast` | combined |
+| `GET /env/weather` | `api.open-meteo.com/v1/forecast` (url rewrite) | combined |
 | `GET /env/air-quality` | `air-quality-api.open-meteo.com/v1/air-quality` (url rewrite) | combined |
 | `GET /weather/forecast` | `api.open-meteo.com/v1/forecast` | split |
 | `GET /air/air-quality` | `air-quality-api.open-meteo.com/v1/air-quality` | split |
 
 Every operation is keyless (`server.authentication.enabled: false`) and gets CORS, 5‑minute response caching (`cacheAllSafeRequests`), a 60 req/min courtesy rate limit (be a good citizen against the free upstream), and OpenAPI request validation (missing `latitude`/`longitude` → 422 before the upstream is touched).
 
+**Request-shaping (mirrors the Worker contract):** the combined API exposes the weather endpoint as `/env/weather` (URL-rewritten to the upstream `/forecast`), and every operation accepts a `forecast` query param that the gateway maps to the upstream `forecast_days` via `urlRewrite` + `contextVariables`. This request-time remap depends on your Tyk version's context-variable substitution — it is **not yet runtime-verified here** (Docker wasn't running when these were generated); bring the stack up and run the test calls below to confirm before relying on it.
+
 ## Run it locally
 
 ```bash
-cd open-meteo-tyk
+cd tyk
 docker compose up -d
 # wait a few seconds for the gateway to load ./apps
 curl -sS http://localhost:8080/hello        # gateway liveness
@@ -43,16 +45,17 @@ curl -sS http://localhost:8080/hello        # gateway liveness
 ### Test calls
 
 ```bash
-# Combined API — forecast (default upstream) and air quality (url-rewritten host)
-curl -sS "http://localhost:8080/env/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&forecast_days=3&timezone=auto"
-curl -sS "http://localhost:8080/env/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5,pm10,ozone&forecast_days=3&timezone=auto"
+# Combined API — weather (url-rewritten to /forecast) and air quality (url-rewritten host)
+# note `forecast=3` -> upstream forecast_days=3
+curl -sS "http://localhost:8080/env/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&forecast=3&timezone=auto"
+curl -sS "http://localhost:8080/env/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5,pm10,ozone&forecast=3&timezone=auto"
 
 # Split APIs — same upstreams, one API each
-curl -sS "http://localhost:8080/weather/forecast?latitude=51.5072&longitude=-0.1276&current=temperature_2m&forecast_days=2&timezone=auto"
+curl -sS "http://localhost:8080/weather/forecast?latitude=51.5072&longitude=-0.1276&current=temperature_2m&forecast=2&timezone=auto"
 curl -sS "http://localhost:8080/air/air-quality?latitude=51.5072&longitude=-0.1276&current=european_aqi,pm2_5&timezone=auto"
 
 # Validation demo — omit longitude → 422 from Tyk, upstream never called
-curl -sS -i "http://localhost:8080/env/forecast?latitude=40.7128"
+curl -sS -i "http://localhost:8080/env/weather?latitude=40.7128"
 ```
 
 ### Editing / reloading

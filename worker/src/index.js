@@ -7,8 +7,8 @@
  * current temperature + air quality.
  *
  *   GET /                -> demo HTML page
- *   GET /forecast        -> api.open-meteo.com/v1/forecast              (requires latitude, longitude)
- *   GET /air-quality     -> air-quality-api.open-meteo.com/v1/air-quality (requires latitude, longitude)
+ *   GET /weather         -> api.open-meteo.com/v1/forecast              (requires latitude, longitude; `forecast` -> forecast_days)
+ *   GET /air-quality     -> air-quality-api.open-meteo.com/v1/air-quality (requires latitude, longitude; `forecast` -> forecast_days)
  *   GET /geocode         -> geocoding-api.open-meteo.com/v1/search      (requires name)
  *   GET /openapi.json    -> machine-readable description of this proxy
  *   GET /health          -> liveness
@@ -36,11 +36,18 @@ function json(data, status = 200, extra = {}) {
   });
 }
 
-async function proxy(upstreamBase, url, required) {
+async function proxy(upstreamBase, url, required, renames = {}) {
   const params = url.searchParams;
   for (const p of required) {
     if (!params.has(p) || params.get(p) === "") {
       return json({ error: `missing required query parameter: ${p}` }, 422);
+    }
+  }
+  // Rename inbound params to the names the upstream expects (e.g. forecast -> forecast_days).
+  for (const [from, to] of Object.entries(renames)) {
+    if (params.has(from)) {
+      params.set(to, params.get(from));
+      params.delete(from);
     }
   }
   const target = `${upstreamBase}?${params.toString()}`;
@@ -74,10 +81,10 @@ export default {
         return new Response(HTML, {
           headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=60", ...CORS },
         });
-      case "/forecast":
-        return proxy(UPSTREAMS.forecast, url, ["latitude", "longitude"]);
+      case "/weather":
+        return proxy(UPSTREAMS.forecast, url, ["latitude", "longitude"], { forecast: "forecast_days" });
       case "/air-quality":
-        return proxy(UPSTREAMS["air-quality"], url, ["latitude", "longitude"]);
+        return proxy(UPSTREAMS["air-quality"], url, ["latitude", "longitude"], { forecast: "forecast_days" });
       case "/geocode":
         return proxy(UPSTREAMS.geocode, url, ["name"]);
       case "/openapi.json":
@@ -86,7 +93,7 @@ export default {
         return json({ status: "ok" });
       default:
         return json(
-          { error: "not found", paths: ["/", "/forecast", "/air-quality", "/geocode", "/openapi.json", "/health"] },
+          { error: "not found", paths: ["/", "/weather", "/air-quality", "/geocode", "/openapi.json", "/health"] },
           404
         );
     }
@@ -103,7 +110,7 @@ function openapi(origin) {
     },
     servers: [{ url: origin }],
     paths: {
-      "/forecast": {
+      "/weather": {
         get: {
           operationId: "getWeatherForecast",
           summary: "Weather forecast for a coordinate",
@@ -113,7 +120,7 @@ function openapi(origin) {
             { name: "current", in: "query", schema: { type: "string" } },
             { name: "hourly", in: "query", schema: { type: "string" } },
             { name: "daily", in: "query", schema: { type: "string" } },
-            { name: "forecast_days", in: "query", schema: { type: "integer" } },
+            { name: "forecast", in: "query", description: "Number of forecast days (mapped to Open-Meteo forecast_days).", schema: { type: "integer" } },
             { name: "timezone", in: "query", schema: { type: "string" } },
           ],
           responses: { "200": { description: "Forecast" } },
@@ -128,7 +135,7 @@ function openapi(origin) {
             { name: "longitude", in: "query", required: true, schema: { type: "number" } },
             { name: "current", in: "query", schema: { type: "string" } },
             { name: "hourly", in: "query", schema: { type: "string" } },
-            { name: "forecast_days", in: "query", schema: { type: "integer" } },
+            { name: "forecast", in: "query", description: "Number of forecast days (mapped to Open-Meteo forecast_days).", schema: { type: "integer" } },
             { name: "timezone", in: "query", schema: { type: "string" } },
           ],
           responses: { "200": { description: "Air quality" } },
@@ -214,8 +221,8 @@ const HTML = `<!doctype html>
     </div>
   </div>
   <p class="muted">
-    Under the hood this page calls <code>/geocode</code>, then <code>/forecast</code> and <code>/air-quality</code> on this same Worker.
-    Try them directly: <a id="lnkF">/forecast</a> &middot; <a id="lnkA">/air-quality</a> &middot; <a href="/openapi.json">/openapi.json</a>
+    Under the hood this page calls <code>/geocode</code>, then <code>/weather</code> and <code>/air-quality</code> on this same Worker.
+    Try them directly: <a id="lnkF">/weather</a> &middot; <a id="lnkA">/air-quality</a> &middot; <a href="/openapi.json">/openapi.json</a>
   </p>
 </div>
 <script>
@@ -235,7 +242,7 @@ $("f").addEventListener("submit", async (e) => {
     const lat=hit.latitude, lon=hit.longitude;
     $("place").textContent = [hit.name, hit.admin1, hit.country].filter(Boolean).join(", ") + "  -  " + lat.toFixed(3) + ", " + lon.toFixed(3);
     const base = "latitude="+lat+"&longitude="+lon+"&timezone=auto";
-    const fUrl = "/forecast?"+base+"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m";
+    const fUrl = "/weather?"+base+"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m";
     const aUrl = "/air-quality?"+base+"&current=european_aqi,us_aqi,pm2_5,pm10,ozone";
     $("lnkF").href=fUrl; $("lnkA").href=aUrl;
     const [f,a] = await Promise.all([ fetch(fUrl).then(r=>r.json()), fetch(aUrl).then(r=>r.json()) ]);
