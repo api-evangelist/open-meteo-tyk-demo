@@ -1,101 +1,66 @@
 # Open-Meteo Weather & Air Quality — Tyk OAS demo
 
-[Tyk OAS](https://tyk.io/docs/api-management/gateway-config-tyk-oas) API definitions that proxy two free, keyless [Open-Meteo](https://open-meteo.com) services and can be exposed as MCP servers, plus a local `docker-compose` stack (Gateway + Redis) to run the whole thing.
+[Tyk OAS](https://tyk.io/docs/api-management/gateway-config-tyk-oas) API definitions that proxy two free, keyless [Open-Meteo](https://open-meteo.com) services, plus a local `docker-compose` stack (Gateway + Redis). **Runtime-verified on Tyk Gateway OSS v5.6.**
+
+> These files reflect what **actually loads and serves in real Tyk OSS** — see [Gotchas](#gotchas-what-real-tyk-taught-us) for the things that bit us (and that a code gateway like the sibling Cloudflare Worker hides).
+
+## The two APIs — one upstream each
+
+Tyk's model is **one upstream per API**, so this is two API definitions, not one:
+
+| Client endpoint (via Tyk) | Upstream |
+|---|---|
+| `GET /weather/forecast` | `api.open-meteo.com/v1/forecast` |
+| `GET /air/air-quality` | `air-quality-api.open-meteo.com/v1/air-quality` |
+
+Each is keyless (`authentication.enabled: false`) and gets CORS, response caching, request validation (missing `latitude`/`longitude` → 422 before the upstream is hit), and a courtesy rate limit. Clients pass **Open-Meteo's native query params** (`latitude`, `longitude`, `current`, `hourly`, `daily`, `forecast_days`, `timezone`).
 
 ## Layout
 
 ```
 tyk/
-├── docker-compose.yml          # Tyk Gateway (OSS) + Redis
-├── tyk.standalone.conf         # file-based gateway config (loads ./apps)
-├── apps/                        # OAS API definitions the gateway loads (JSON)
-│   ├── open-meteo-weather-air-quality-tyk-oas.json   # COMBINED: one API, two upstreams  → /env
-│   ├── open-meteo-weather-tyk-oas.json               # SPLIT:   weather only            → /weather
-│   └── open-meteo-air-quality-tyk-oas.json           # SPLIT:   air quality only        → /air
-├── yaml/                        # identical definitions in YAML (for reading / Dashboard import)
-│   ├── open-meteo-weather-air-quality-tyk-oas.yml
-│   ├── open-meteo-weather-tyk-oas.yml
-│   └── open-meteo-air-quality-tyk-oas.yml
+├── docker-compose.yml     # Tyk Gateway OSS + Redis
+├── tyk.standalone.conf    # file-based config (use_db_app_configs=false, app_path=/opt/tyk-gateway/apps)
+├── apps/                  # file-based API definitions — a PAIR per API (see gotchas)
+│   ├── open-meteo-weather.json          # Tyk Classic wrapper (is_oas: true)
+│   ├── open-meteo-weather-oas.json      # the OAS definition it references
+│   ├── open-meteo-air-quality.json
+│   └── open-meteo-air-quality-oas.json
+├── yaml/                  # the two OAS definitions in YAML, for reading
 └── README.md
 ```
-
-> The gateway loads the **JSON** files in `apps/`. The `yaml/` copies are byte-for-byte equivalent (same keys/order) for easier reading and for tools/Dashboard flows that prefer YAML — edit the JSON as the source of truth, or regenerate the YAML from it.
-
-You get **two patterns to choose from**:
-
-- **Combined** (`/env`) — one API fronting both Open-Meteo hosts. The forecast rides the default `upstream.url`; the air-quality operation is routed with an operation-level `urlRewrite` to the other host. One API → one MCP server with two tools. This is the "launch a new API and MCP server" story.
-- **Split** (`/weather`, `/air`) — the idiomatic one-API-per-backend pattern, no URL rewrite. Two APIs → two MCP servers.
-
-All three load at once in the demo stack (distinct listen paths, no conflict), so you can show either approach.
-
-| Client endpoint (via Tyk) | Upstream | Defined in |
-|---|---|---|
-| `GET /env/weather` | `api.open-meteo.com/v1/forecast` (url rewrite) | combined |
-| `GET /env/air-quality` | `air-quality-api.open-meteo.com/v1/air-quality` (url rewrite) | combined |
-| `GET /weather/forecast` | `api.open-meteo.com/v1/forecast` | split |
-| `GET /air/air-quality` | `air-quality-api.open-meteo.com/v1/air-quality` | split |
-
-Every operation is keyless (`server.authentication.enabled: false`) and gets CORS, 5‑minute response caching (`cacheAllSafeRequests`), a 60 req/min courtesy rate limit (be a good citizen against the free upstream), and OpenAPI request validation (missing `latitude`/`longitude` → 422 before the upstream is touched).
-
-**Request-shaping (mirrors the Worker contract):** the combined API exposes the weather endpoint as `/env/weather` (URL-rewritten to the upstream `/forecast`), and every operation accepts a `forecast` query param that the gateway maps to the upstream `forecast_days` via `urlRewrite` + `contextVariables`. This request-time remap depends on your Tyk version's context-variable substitution — it is **not yet runtime-verified here** (Docker wasn't running when these were generated); bring the stack up and run the test calls below to confirm before relying on it.
 
 ## Run it locally
 
 ```bash
 cd tyk
-docker compose up -d
-# wait a few seconds for the gateway to load ./apps
-curl -sS http://localhost:8080/hello        # gateway liveness
+docker compose up -d          # tyk-gateway on :8080, redis gated by healthcheck
 ```
 
-### Test calls
+### Test calls (verified)
 
 ```bash
-# Combined API — weather (url-rewritten to /forecast) and air quality (url-rewritten host)
-# note `forecast=3` -> upstream forecast_days=3
-curl -sS "http://localhost:8080/env/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&forecast=3&timezone=auto"
-curl -sS "http://localhost:8080/env/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5,pm10,ozone&forecast=3&timezone=auto"
+curl "http://localhost:8080/weather/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&forecast_days=2&timezone=auto"
+curl "http://localhost:8080/air/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5&timezone=auto"
 
-# Split APIs — same upstreams, one API each
-curl -sS "http://localhost:8080/weather/forecast?latitude=51.5072&longitude=-0.1276&current=temperature_2m&forecast=2&timezone=auto"
-curl -sS "http://localhost:8080/air/air-quality?latitude=51.5072&longitude=-0.1276&current=european_aqi,pm2_5&timezone=auto"
-
-# Validation demo — omit longitude → 422 from Tyk, upstream never called
-curl -sS -i "http://localhost:8080/env/weather?latitude=40.7128"
-```
-
-### Editing / reloading
-
-The `apps/` folder is mounted read-only and loaded at startup. After editing a definition:
-
-```bash
-docker compose restart tyk-gateway
-# or hot-reload without restart:
-curl -sS http://localhost:8080/tyk/reload/group -H "x-tyk-authorization: foo-secret"
+# validation: omit longitude → 422, upstream never called
+curl -i "http://localhost:8080/weather/forecast?latitude=40.7128"
 ```
 
 Tear down: `docker compose down` (add `-v` to drop the Redis volume).
 
-## Deploy to a managed / Dashboard Tyk
+## Live
 
-Any of the three files imports directly:
+Running on AWS behind Caddy (real Let's Encrypt certs): **https://weather-tyk.apievangelist.com/weather/forecast** and **/air/air-quality**.
 
-- **Dashboard:** APIs → Add New API → Import → OpenAPI (Tyk OAS) → upload the JSON.
-- **Gateway API (headless):**
-  ```bash
-  curl -sS http://localhost:8080/tyk/apis/oas \
-    -H "x-tyk-authorization: foo-secret" -H "Content-Type: application/json" \
-    -d @apps/open-meteo-weather-air-quality-tyk-oas.json
-  curl -sS http://localhost:8080/tyk/reload/group -H "x-tyk-authorization: foo-secret"
-  ```
+## Gotchas — what real Tyk taught us
 
-## Expose as an MCP server
+These are the reasons the definitions look the way they do. They're also the honest talking points for the KrakenD/Tyk/agentgateway comparison — a *code* gateway (the Cloudflare Worker in this repo) papers over all of them; declarative Tyk does not.
 
-Tyk generates the MCP tools from the OpenAPI operations, so the tool quality comes straight from these files — stable `operationId`s (`getWeatherForecast`, `getAirQuality`), one-line `summary`s, `description`s that enumerate the valid `hourly`/`current` variables, and typed/`required` parameters with examples. In the Dashboard, open the API and use **Expose as MCP** (Tyk AI features); the published MCP endpoint's tools map 1:1 to these operations. Point Claude or any MCP client at it and it can call the tools directly. The **combined** API gives you one MCP server exposing both tools; the **split** APIs give you one MCP server each.
+1. **File-based OAS needs a PAIR of files, not a bare OAS.** Tyk OSS file-loads a Tyk *Classic* wrapper (`x.json`, `is_oas: true`) **plus** the OAS doc (`x-oas.json`). A hand-authored single OAS file dropped in `app_path` loads as **0 APIs**. Generate the pair by POSTing your OAS to a running gateway (`/tyk/apis/oas`, with a *writable* `app_path`), then commit the pair. See [Tyk docs: Managing Tyk OAS](https://tyk.io/docs/api-management/gateway-config-managing-oas/).
+2. **`rateLimit.per` must be a string duration** (`"60s"`), not an integer — an int fails schema validation and the API silently won't load.
+3. **No "one API across two upstream hosts."** A combined `/env` API that URL-rewrites the air-quality operation to a *different host* returns an **empty 200** — Tyk is one-upstream-per-API. That's why this is two APIs. (KrakenD does declarative multi-backend merge; Tyk doesn't.)
+4. **No declarative query-param rename.** Mapping a public `forecast` param to the upstream's `forecast_days` via `urlRewrite` + `contextVariables` does **not** work (the context var isn't substituted into a clean value). Clients use the native `forecast_days`. The Worker does this rename trivially in JS — the point being that request-shaping like this lives in *code*, not declarative Tyk config.
 
-> The exact MCP toggle/menu label depends on your Tyk version and licensed AI features. The OAS files are the source of truth for the tool definitions regardless of how MCP is enabled.
-
-## Tuning
-- **Rate limit:** 60/min per operation — adjust in `middleware.operations.*.rateLimit`.
-- **Cache:** global `cacheAllSafeRequests` caches every GET (keyed by full path + query) for 300s. Set `enableUpstreamCacheControl: true` to honor upstream headers instead.
-- **Image version:** `docker-compose.yml` pins `tykio/tyk-gateway:v5.6.0` — bump to your target Gateway version if needed.
+## Managed / Dashboard Tyk
+Import either `*-oas.json` via **Dashboard → Add New API → Import → OpenAPI (Tyk OAS)**, or headless via `POST /tyk/apis/oas` (needs a writable `app_path`) then `POST /tyk/reload/group`. The Dashboard's **Expose as MCP** turns each API's operations into MCP tools (`getWeatherForecast`, `getAirQuality`).

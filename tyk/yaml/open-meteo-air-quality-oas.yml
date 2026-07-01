@@ -1,0 +1,136 @@
+components: {}
+info:
+  description: Tyk proxy for the Open-Meteo air quality service (air-quality-api.open-meteo.com). Single keyless upstream.
+    Adds CORS, response caching, a courtesy rate limit, and request validation. Drives an MCP tool `getAirQuality`.
+  title: Open-Meteo Air Quality
+  version: 1.0.0
+openapi: 3.0.3
+paths:
+  /air-quality:
+    get:
+      description: Returns up to a 7-day air quality forecast (particulates, gases, pollen, and AQI values) for a single latitude/longitude,
+        sourced from CAMS. Choose variables with the `current` and `hourly` comma-separated lists. Proxies GET https://air-quality-api.open-meteo.com/v1/air-quality.
+        No API key required.
+      operationId: getAirQuality
+      parameters:
+      - description: WGS84 latitude of the location.
+        example: 40.7128
+        in: query
+        name: latitude
+        required: true
+        schema:
+          format: float
+          maximum: 90
+          minimum: -90
+          type: number
+      - description: WGS84 longitude of the location.
+        example: -74.006
+        in: query
+        name: longitude
+        required: true
+        schema:
+          format: float
+          maximum: 180
+          minimum: -180
+          type: number
+      - description: 'Comma-separated current air quality variables. Examples: european_aqi, us_aqi, pm10, pm2_5, carbon_monoxide,
+          nitrogen_dioxide, sulphur_dioxide, ozone, dust, uv_index.'
+        example: european_aqi,us_aqi,pm2_5,pm10,ozone
+        in: query
+        name: current
+        schema:
+          type: string
+      - description: 'Comma-separated hourly air quality variables. Examples: pm10, pm2_5, carbon_monoxide, nitrogen_dioxide,
+          sulphur_dioxide, ozone, aerosol_optical_depth, dust, uv_index, ammonia, alder_pollen, birch_pollen, grass_pollen,
+          ragweed_pollen, european_aqi, us_aqi.'
+        example: pm2_5,pm10,ozone,nitrogen_dioxide,european_aqi
+        in: query
+        name: hourly
+        schema:
+          type: string
+      - description: Model domain. `auto` picks the best available; CAMS Europe is higher resolution but Europe-only.
+        in: query
+        name: domains
+        schema:
+          default: auto
+          enum:
+          - auto
+          - cams_europe
+          - cams_global
+          type: string
+      - description: Number of forecast days. The gateway maps this to the upstream Open-Meteo `forecast_days` parameter.
+        in: query
+        name: forecast
+        schema:
+          default: 5
+          maximum: 7
+          minimum: 1
+          type: integer
+      - description: IANA timezone, or `auto` to resolve from the coordinate.
+        example: auto
+        in: query
+        name: timezone
+        schema:
+          default: auto
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Air quality payload
+        '400':
+          description: Invalid parameters
+      summary: Get an air quality forecast for a coordinate
+      tags:
+      - Air Quality
+servers:
+- url: http://127.0.0.1:8080/air/
+- description: Local Tyk Gateway listen path
+  url: http://localhost:8080/air
+tags:
+- description: Air quality and pollen forecasts
+  name: Air Quality
+x-tyk-api-gateway:
+  info:
+    id: open-meteo-air-quality
+    name: Open-Meteo Air Quality
+    state:
+      active: true
+  upstream:
+    url: https://air-quality-api.open-meteo.com/v1
+  server:
+    listenPath:
+      value: /air/
+      strip: true
+    authentication:
+      enabled: false
+  middleware:
+    global:
+      cors:
+        enabled: true
+        maxAge: 3600
+        allowedHeaders:
+        - Content-Type
+        - Authorization
+        allowedOrigins:
+        - '*'
+        allowedMethods:
+        - GET
+        - OPTIONS
+      cache:
+        enabled: true
+        timeout: 300
+        cacheAllSafeRequests: true
+        cacheResponseCodes:
+        - 200
+    operations:
+      getAirQuality:
+        validateRequest:
+          enabled: true
+          errorResponseCode: 422
+        rateLimit:
+          enabled: true
+          rate: 60
+          per: 1m0s

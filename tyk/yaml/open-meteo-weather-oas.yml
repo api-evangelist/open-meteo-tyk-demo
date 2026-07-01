@@ -1,0 +1,165 @@
+components: {}
+info:
+  description: Tyk proxy for the Open-Meteo weather forecast service (api.open-meteo.com). Single keyless upstream. Adds CORS,
+    response caching, a courtesy rate limit, and request validation. Drives an MCP tool `getWeatherForecast`.
+  title: Open-Meteo Weather Forecast
+  version: 1.0.0
+openapi: 3.0.3
+paths:
+  /forecast:
+    get:
+      description: Returns up to a 16-day weather forecast for a single latitude/longitude. Choose variables with the `current`,
+        `hourly`, and `daily` comma-separated lists. Proxies GET https://api.open-meteo.com/v1/forecast. No API key required.
+      operationId: getWeatherForecast
+      parameters:
+      - description: WGS84 latitude of the location, e.g. 40.7128 for New York City.
+        example: 40.7128
+        in: query
+        name: latitude
+        required: true
+        schema:
+          format: float
+          maximum: 90
+          minimum: -90
+          type: number
+      - description: WGS84 longitude of the location, e.g. -74.006 for New York City.
+        example: -74.006
+        in: query
+        name: longitude
+        required: true
+        schema:
+          format: float
+          maximum: 180
+          minimum: -180
+          type: number
+      - description: 'Comma-separated current-condition variables. Examples: temperature_2m, relative_humidity_2m, apparent_temperature,
+          is_day, precipitation, weather_code, cloud_cover, wind_speed_10m, wind_direction_10m.'
+        example: temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m
+        in: query
+        name: current
+        schema:
+          type: string
+      - description: 'Comma-separated hourly variables. Examples: temperature_2m, apparent_temperature, precipitation_probability,
+          precipitation, weather_code, cloud_cover, wind_speed_10m, uv_index.'
+        example: temperature_2m,precipitation_probability,weather_code
+        in: query
+        name: hourly
+        schema:
+          type: string
+      - description: 'Comma-separated daily variables. Examples: weather_code, temperature_2m_max, temperature_2m_min, sunrise,
+          sunset, precipitation_sum, wind_speed_10m_max.'
+        example: weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum
+        in: query
+        name: daily
+        schema:
+          type: string
+      - description: Number of forecast days. The gateway maps this to the upstream Open-Meteo `forecast_days` parameter.
+        in: query
+        name: forecast
+        schema:
+          default: 7
+          maximum: 16
+          minimum: 1
+          type: integer
+      - description: Number of past days to include (0-92).
+        in: query
+        name: past_days
+        schema:
+          default: 0
+          maximum: 92
+          minimum: 0
+          type: integer
+      - in: query
+        name: temperature_unit
+        schema:
+          default: celsius
+          enum:
+          - celsius
+          - fahrenheit
+          type: string
+      - in: query
+        name: wind_speed_unit
+        schema:
+          default: kmh
+          enum:
+          - kmh
+          - ms
+          - mph
+          - kn
+          type: string
+      - in: query
+        name: precipitation_unit
+        schema:
+          default: mm
+          enum:
+          - mm
+          - inch
+          type: string
+      - description: IANA timezone, or `auto` to resolve from the coordinate.
+        example: auto
+        in: query
+        name: timezone
+        schema:
+          default: auto
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Forecast payload
+        '400':
+          description: Invalid parameters
+      summary: Get a weather forecast for a coordinate
+      tags:
+      - Weather
+servers:
+- url: http://127.0.0.1:8080/weather/
+- description: Local Tyk Gateway listen path
+  url: http://localhost:8080/weather
+tags:
+- description: Point weather forecasts
+  name: Weather
+x-tyk-api-gateway:
+  info:
+    id: open-meteo-weather
+    name: Open-Meteo Weather Forecast
+    state:
+      active: true
+  upstream:
+    url: https://api.open-meteo.com/v1
+  server:
+    listenPath:
+      value: /weather/
+      strip: true
+    authentication:
+      enabled: false
+  middleware:
+    global:
+      cors:
+        enabled: true
+        maxAge: 3600
+        allowedHeaders:
+        - Content-Type
+        - Authorization
+        allowedOrigins:
+        - '*'
+        allowedMethods:
+        - GET
+        - OPTIONS
+      cache:
+        enabled: true
+        timeout: 300
+        cacheAllSafeRequests: true
+        cacheResponseCodes:
+        - 200
+    operations:
+      getWeatherForecast:
+        validateRequest:
+          enabled: true
+          errorResponseCode: 422
+        rateLimit:
+          enabled: true
+          rate: 60
+          per: 1m0s

@@ -1,60 +1,54 @@
 # Open-Meteo Weather & Air Quality — API demo
 
-A small, keyless demo that fronts two free [Open-Meteo](https://open-meteo.com) services — **weather forecast** and **air quality** — as one clean API, two ways:
+Fronts two free, keyless [Open-Meteo](https://open-meteo.com) services — **weather forecast** and **air quality** — two ways, so you can see what a **code** gateway and a **declarative** gateway each can and can't do over the *same* upstreams:
 
-- **[`tyk/`](tyk/)** — declarative [Tyk OAS](https://tyk.io/docs/api-management/gateway-config-tyk-oas) gateway definitions (combined + split), plus a local `docker-compose` stack (Gateway + Redis). This is the "launch a new API + MCP server" path.
-- **[`worker/`](worker/)** — a Cloudflare Worker that reimplements the same proxy façade and adds a demo page, so there's a public URL to share.
+- **[`worker/`](worker/)** — a Cloudflare Worker (JS) that proxies both services, renames paths/params freely, merges a combined surface, and serves a demo page. Code can shape requests however it likes.
+- **[`tyk/`](tyk/)** — declarative [Tyk OAS](https://tyk.io/docs/api-management/gateway-config-tyk-oas) definitions, runtime-verified on Tyk OSS. Two APIs (one upstream each), native params, no code — and honest about what declarative config **can't** do (see [tyk/README.md](tyk/README.md)).
 
-## 🔗 Live demo
+This split is the point: the Worker's path/param rewrites and combined endpoint are trivial in JS but **don't translate to declarative Tyk config** — great fodder for a gateway comparison.
 
-**https://weather.apievangelist.com**  (also on `https://open-meteo-tyk-demo.kinlane.workers.dev`)
+## 🔗 Live
 
-| Endpoint | What it does |
+| | URL |
 |---|---|
-| [`/`](https://weather.apievangelist.com/) | Demo page — type a city, it geocodes and renders current temp + AQI |
-| `/weather?latitude=&longitude=` | Weather forecast (proxies `api.open-meteo.com/v1/forecast`). Optional `forecast=N` days. |
-| `/air-quality?latitude=&longitude=` | Air quality (proxies `air-quality-api.open-meteo.com/v1/air-quality`) |
-| `/geocode?name=` | Place name → coordinates (`geocoding-api.open-meteo.com/v1/search`) |
-| [`/openapi.json`](https://weather.apievangelist.com/openapi.json) | Machine-readable description of the proxy |
-| `/health` | Liveness |
+| **Tyk (AWS)** | `https://weather-tyk.apievangelist.com/weather/forecast` · `/air/air-quality` |
+| **Worker** | `https://open-meteo-tyk-demo.kinlane.workers.dev` (`/`, `/weather`, `/air-quality`, `/geocode`, `/openapi.json`) |
 
 ```bash
-curl "https://weather.apievangelist.com/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&forecast=3&timezone=auto"
-curl "https://weather.apievangelist.com/air-quality?latitude=40.7128&longitude=-74.006&current=european_aqi,us_aqi,pm2_5&timezone=auto"
+# Tyk (native Open-Meteo params)
+curl "https://weather-tyk.apievangelist.com/weather/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m,weather_code&forecast_days=2&timezone=auto"
+
+# Worker (renamed path /weather + forecast alias — done in JS)
+curl "https://open-meteo-tyk-demo.kinlane.workers.dev/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m&forecast=3&timezone=auto"
 ```
 
-Both layers add the same value over the raw upstreams: **CORS**, **edge/response caching (~5 min)**, and **request validation** (missing `latitude`/`longitude` → `422`, upstream never touched).
+Both add **CORS**, **caching (~5 min)**, and **request validation** (missing `latitude`/`longitude` → `422`) over the raw upstreams.
 
-## Run the Worker locally
+## Run locally
 
 ```bash
-cd worker
-npm install
-npm run dev        # wrangler dev — http://localhost:8787
-npm run deploy     # wrangler deploy (account pinned in wrangler.toml)
+# Worker
+cd worker && npm install && npm run dev      # http://localhost:8787
+
+# Tyk gateway
+cd tyk && docker compose up -d               # http://localhost:8080
+curl "http://localhost:8080/weather/forecast?latitude=40.7128&longitude=-74.006&current=temperature_2m&forecast_days=2&timezone=auto"
 ```
-
-## Run the Tyk gateway locally
-
-```bash
-cd tyk
-docker compose up -d
-curl "http://localhost:8080/env/weather?latitude=40.7128&longitude=-74.006&current=temperature_2m&forecast=3&timezone=auto"
-```
-
-See [tyk/README.md](tyk/README.md) for the combined vs split APIs, the MCP-expose flow, and tuning.
 
 ## Repo layout
 
 ```
 open-meteo-tyk-demo/
-├── worker/                 # Cloudflare Worker — public proxy + demo page
+├── worker/                 # Cloudflare Worker — proxy + demo page (path/param rewrites, combined surface)
 │   ├── src/index.js
 │   ├── wrangler.toml
 │   └── package.json
-└── tyk/                    # Tyk OAS gateway
-    ├── apps/               # OAS API definitions (combined + 2 split)
+└── tyk/                    # Tyk OAS gateway (runtime-verified on OSS v5.6)
+    ├── apps/               # file-based defs — a Classic+OAS PAIR per API (weather, air-quality)
+    ├── yaml/               # the OAS definitions in YAML, for reading
     ├── docker-compose.yml  # Gateway + Redis
     ├── tyk.standalone.conf
-    └── README.md
+    └── README.md           # the real-Tyk gotchas
 ```
+
+> Note: the old `weather.apievangelist.com` Worker custom domain was retired; the Worker now lives on its `workers.dev` URL, and the canonical live gateways are the AWS-hosted `weather-tyk` / `weather-krakend` / `weather-agentgateway` subdomains (KrakenD and agentgateway are in the sibling repos).

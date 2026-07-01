@@ -1,144 +1,140 @@
 {
-  "openapi": "3.0.3",
+  "components": {},
   "info": {
+    "description": "Tyk proxy for the Open-Meteo air quality service (air-quality-api.open-meteo.com). Single keyless upstream. Adds CORS, response caching, a courtesy rate limit, and request validation. Drives an MCP tool `getAirQuality`.",
     "title": "Open-Meteo Air Quality",
-    "version": "1.0.0",
-    "description": "Tyk proxy for the Open-Meteo air quality service (air-quality-api.open-meteo.com). Single keyless upstream. Adds CORS, response caching, a courtesy rate limit, and request validation. Drives an MCP tool `getAirQuality`."
+    "version": "1.0.0"
   },
-  "servers": [
-    {
-      "url": "http://localhost:8080/air",
-      "description": "Local Tyk Gateway listen path"
-    }
-  ],
-  "security": [],
-  "tags": [
-    {
-      "name": "Air Quality",
-      "description": "Air quality and pollen forecasts"
-    }
-  ],
+  "openapi": "3.0.3",
   "paths": {
     "/air-quality": {
       "get": {
-        "operationId": "getAirQuality",
-        "tags": [
-          "Air Quality"
-        ],
-        "summary": "Get an air quality forecast for a coordinate",
         "description": "Returns up to a 7-day air quality forecast (particulates, gases, pollen, and AQI values) for a single latitude/longitude, sourced from CAMS. Choose variables with the `current` and `hourly` comma-separated lists. Proxies GET https://air-quality-api.open-meteo.com/v1/air-quality. No API key required.",
+        "operationId": "getAirQuality",
         "parameters": [
           {
-            "name": "latitude",
-            "in": "query",
-            "required": true,
             "description": "WGS84 latitude of the location.",
-            "schema": {
-              "type": "number",
-              "format": "float",
-              "minimum": -90,
-              "maximum": 90
-            },
-            "example": 40.7128
-          },
-          {
-            "name": "longitude",
+            "example": 40.7128,
             "in": "query",
+            "name": "latitude",
             "required": true,
-            "description": "WGS84 longitude of the location.",
             "schema": {
-              "type": "number",
               "format": "float",
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            }
+          },
+          {
+            "description": "WGS84 longitude of the location.",
+            "example": -74.006,
+            "in": "query",
+            "name": "longitude",
+            "required": true,
+            "schema": {
+              "format": "float",
+              "maximum": 180,
               "minimum": -180,
-              "maximum": 180
-            },
-            "example": -74.006
+              "type": "number"
+            }
           },
           {
-            "name": "current",
-            "in": "query",
-            "required": false,
             "description": "Comma-separated current air quality variables. Examples: european_aqi, us_aqi, pm10, pm2_5, carbon_monoxide, nitrogen_dioxide, sulphur_dioxide, ozone, dust, uv_index.",
+            "example": "european_aqi,us_aqi,pm2_5,pm10,ozone",
+            "in": "query",
+            "name": "current",
             "schema": {
               "type": "string"
-            },
-            "example": "european_aqi,us_aqi,pm2_5,pm10,ozone"
+            }
           },
           {
-            "name": "hourly",
-            "in": "query",
-            "required": false,
             "description": "Comma-separated hourly air quality variables. Examples: pm10, pm2_5, carbon_monoxide, nitrogen_dioxide, sulphur_dioxide, ozone, aerosol_optical_depth, dust, uv_index, ammonia, alder_pollen, birch_pollen, grass_pollen, ragweed_pollen, european_aqi, us_aqi.",
+            "example": "pm2_5,pm10,ozone,nitrogen_dioxide,european_aqi",
+            "in": "query",
+            "name": "hourly",
             "schema": {
               "type": "string"
-            },
-            "example": "pm2_5,pm10,ozone,nitrogen_dioxide,european_aqi"
+            }
           },
           {
-            "name": "domains",
-            "in": "query",
-            "required": false,
             "description": "Model domain. `auto` picks the best available; CAMS Europe is higher resolution but Europe-only.",
+            "in": "query",
+            "name": "domains",
             "schema": {
-              "type": "string",
+              "default": "auto",
               "enum": [
                 "auto",
                 "cams_europe",
                 "cams_global"
               ],
-              "default": "auto"
+              "type": "string"
             }
           },
           {
-            "name": "forecast",
-            "in": "query",
-            "required": false,
             "description": "Number of forecast days. The gateway maps this to the upstream Open-Meteo `forecast_days` parameter.",
+            "in": "query",
+            "name": "forecast",
             "schema": {
-              "type": "integer",
-              "minimum": 1,
+              "default": 5,
               "maximum": 7,
-              "default": 5
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
-            "name": "timezone",
-            "in": "query",
-            "required": false,
             "description": "IANA timezone, or `auto` to resolve from the coordinate.",
+            "example": "auto",
+            "in": "query",
+            "name": "timezone",
             "schema": {
-              "type": "string",
-              "default": "auto"
-            },
-            "example": "auto"
+              "default": "auto",
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Air quality payload",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object"
                 }
               }
-            }
+            },
+            "description": "Air quality payload"
           },
           "400": {
             "description": "Invalid parameters"
           }
-        }
+        },
+        "summary": "Get an air quality forecast for a coordinate",
+        "tags": [
+          "Air Quality"
+        ]
       }
     }
   },
-  "components": {},
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8080/air/"
+    },
+    {
+      "description": "Local Tyk Gateway listen path",
+      "url": "http://localhost:8080/air"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Air quality and pollen forecasts",
+      "name": "Air Quality"
+    }
+  ],
   "x-tyk-api-gateway": {
     "info": {
       "id": "open-meteo-air-quality",
       "name": "Open-Meteo Air Quality",
       "state": {
-        "active": true,
-        "internal": false
+        "active": true
       }
     },
     "upstream": {
@@ -157,22 +153,18 @@
       "global": {
         "cors": {
           "enabled": true,
+          "maxAge": 3600,
+          "allowedHeaders": [
+            "Content-Type",
+            "Authorization"
+          ],
           "allowedOrigins": [
             "*"
           ],
           "allowedMethods": [
             "GET",
             "OPTIONS"
-          ],
-          "allowedHeaders": [
-            "Content-Type",
-            "Authorization"
-          ],
-          "exposedHeaders": [],
-          "allowCredentials": false,
-          "maxAge": 3600,
-          "optionsPassthrough": false,
-          "debug": false
+          ]
         },
         "cache": {
           "enabled": true,
@@ -180,11 +172,7 @@
           "cacheAllSafeRequests": true,
           "cacheResponseCodes": [
             200
-          ],
-          "enableUpstreamCacheControl": false
-        },
-        "contextVariables": {
-          "enabled": true
+          ]
         }
       },
       "operations": {
@@ -196,12 +184,7 @@
           "rateLimit": {
             "enabled": true,
             "rate": 60,
-            "per": 60
-          },
-          "urlRewrite": {
-            "enabled": true,
-            "pattern": "/air-quality",
-            "rewriteTo": "https://air-quality-api.open-meteo.com/v1/air-quality?forecast_days=$tyk_context.request_data.forecast"
+            "per": "1m0s"
           }
         }
       }
