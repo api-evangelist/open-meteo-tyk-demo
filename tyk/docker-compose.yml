@@ -1,0 +1,29 @@
+services:
+  tyk-redis:
+    image: redis:7.2-alpine
+    container_name: tyk-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - tyk-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  tyk-gateway:
+    image: tykio/tyk-gateway:v5.6.0
+    container_name: tyk-gateway
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./tyk.standalone.conf:/opt/tyk-gateway/tyk.conf:ro
+      - ./apps:/opt/tyk-gateway/apps:ro
+    depends_on:
+      tyk-redis:
+        condition: service_healthy
+
+volumes:
+  tyk-redis-data:
