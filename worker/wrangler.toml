@@ -3,7 +3,6 @@ account_id = "06637f028805d143aad220043ab346e3"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
 workers_dev = true
-
-routes = [
-  { pattern = "weather.apievangelist.com", custom_domain = true }
-]
+# Custom domain weather.apievangelist.com was retired; the Worker lives on its
+# *.workers.dev URL. The canonical live gateways are the AWS-hosted
+# weather-tyk / weather-krakend / weather-agentgateway subdomains.
